@@ -148,23 +148,23 @@ int main(){
             } else{
               ok = false;
             }
-            if (ok){
-              std::string patternStage="Stage:1";
-              int stage;
-              std::string::size_type finalPosition;
-              initialPosition = extracted.find("Stage:1");
-              if (initialPosition != std::string::npos){
-                  initialPosition = initialPosition + patternStage.length();
-                  finalPosition = extracted.find("\n",initialPosition+1);
-                  stage=std::stol(extracted.substr(initialPosition, finalPosition-initialPosition));
-                  std::cout<<stage<<std::endl;
-                  if (stage==0){
-                    ok = true;
-                  } else{
-                    ok = false;
-                }
-              } else{
-                ok = false;
+            if (ok){while (!extracted.empty()){
+                extracted= {};
+                std::getline(messageStream,extracted);
+                  std::string patternStage="Stage:";
+                  unsigned long stage;
+                  std::string::size_type finalPosition;
+                  initialPosition = extracted.find("Stage:");
+                  if (initialPosition != std::string::npos){
+                      initialPosition = extracted.find("Stage:") + patternStage.length();
+                      finalPosition = extracted.find("\n",initialPosition+1);
+                      stage=std::stol(extracted.substr(initialPosition, finalPosition-initialPosition));
+                      if (stage==1){
+                        ok = true;
+                      } else{
+                        ok = false;
+                    }
+                  }
               }
             }
         }
