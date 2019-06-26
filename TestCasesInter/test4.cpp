@@ -1,4 +1,4 @@
-#include "test3.h"
+#include "test4.h"
 #include <stdio.h>
 #include <sstream>
 //#include <math.h>
@@ -17,8 +17,7 @@ bool stage0 = true;
 bool pings = true;
 bool interchange = true;
 bool stage0ok = true;
-bool tryStage1 = true;
-bool stage1 = true;
+bool alertM = false;
 int thread_error;
 pthread_t   marrthrHandle[ 2 ];
 Q4SSDPParams params; 
@@ -103,7 +102,7 @@ bool sendRegularPings(std::vector<uint64_t> &arrSentPingTimestamps, unsigned lon
     int pingNumberToSend = pingsToSend;
     int time_error ;
     struct timeval time_s;
-    for ( pingNumber = 0; pingNumber < pingNumberToSend; pingNumber++ )
+    for ( pingNumber = 0; pingNumber < pingNumberToSend; pingNumber=pingNumber+10)
     {
         //std::cout<<"ping"<<pingNumber<<std::endl;
         // Store the timestamp
@@ -121,7 +120,7 @@ bool sendRegularPings(std::vector<uint64_t> &arrSentPingTimestamps, unsigned lon
         // Wait the established time between pings
 
         
-        usleep(timeBetweenPings*1000 );
+        usleep(timeBetweenPings*1000*2 );
     }
    
 
@@ -146,7 +145,8 @@ void calculateLatency(Q4SMessageManager &mReceivedMessages, std::vector<uint64_t
             //printf("TIEMPO 200 0k: %"PRIu64"\nTIEMPO PING: %"PRIu64"\n",messageInfo.timeStamp, TimeStampPing);
 
             
-            actualPingLatency = (messageInfo.timeStamp - TimeStampPing)/ 2.0f;
+            //actualPingLatency = (messageInfo.timeStamp - TimeStampPing)/ 2.0f;
+            actualPingLatency = 300;
             //printf("TIEMPO 200 0k: %lu\nTIEMPO PING: %lu\n",messageInfo.timeStamp, arrSentPingTimestamps[ pingIndex ]);
             // Latency store
             arrPingLatencies.push_back( actualPingLatency );
@@ -393,64 +393,47 @@ int main () {
                                     char data2save[200]={};
                                     unsigned long pingsToSend = params.procedure.windowSizeLatencyCalcDownlink;
                                     pings &= sendRegularPings(arrSentPingTimestamps, pingsToSend, params.procedure.negotiationTimeBetweenPingsUplink);
-                                    usleep(50*1000*pingsToSend);
                                     if (pings){
                                         usleep(params.procedure.negotiationTimeBetweenPingsUplink *1000);
                                         // Calculate Latency
                                         calculateLatency(mReceivedMessagesUDP, arrSentPingTimestamps, results.values.latency, pingsToSend, false);
                                         float packetLoss = 0.f;
                                         calculateJitterStage0(mReceivedMessagesUDP, results.values.jitter,params.procedure.negotiationTimeBetweenPingsUplink, pingsToSend, false);
+                                        results.values.latency= 1000;
+                                        results.values.jitter= 100;
                                         results.values.packetLoss= 0; 
-                                        results.values.bandwidth= 0; 
+                                        results.values.bandwidth= 0;
                                         interchange &= interchangeMeasurementProcedure(downMeasurements, results);
                                         if (interchange){
-                                            downResults.values = downMeasurements;
-                                            stage0ok &= checkStage0(params.latency, params.jitterUp, params.latency, params.jitterDown, results, downResults);
-                                            if(stage0ok){
-                                                message.initRequest(Q4SMTYPE_READY, "127.0.0.1", "56001", false, 0, false, 0, true, 1);
-                                                while(mReceivedMessagesUDP.size()>0)
-                                                {
-                                                    mReceivedMessagesUDP.eraseMessages();
+                                            while(/*mReceivedMessagesTCP.size()==0*/true){
+                                                /* while(mReceivedMessagesTCP.size()==0){
+                                                    sleep(1);
+                                                }*/
+                                                while(mReceivedMessagesTCP.size()==0){
+                                                    sleep(1);
                                                 }
-                                                tryStage1 &= mClientSocket.sendTcpData( message.getMessageCChar() );
-                                                if(tryStage1){
-                                                    while(mReceivedMessagesTCP.size()==0){
-                                                        sleep(1);
+                                                mReceivedMessagesTCP.readFirst( messageR );
+                                                if (!alertM){
+                                                    std::string extracted;
+                                                    std::string::size_type initialPosition;
+                                                    std::istringstream messageStream (messageR);
+                                                    std::getline(messageStream, extracted);
+                                                    initialPosition = extracted.find("ALERT");
+                                                    if (initialPosition != std::string::npos){
+                                                        alertM = true;
+                                                    } else{
+                                                        alertM = false;
                                                     }
-                                                    mReceivedMessagesTCP.readFirst( messageR );
-                                                    stage1 &= Q4SMessageTools_is200OKMessage(messageR, false, 0, 0); 
-                                                    if (stage1){
-                                                        //std::cout<<messageR<<std::endl;
-                                                        std::cout<<"Success"<<std::endl;
-                                                        pthread_cancel(marrthrHandle[0]);
-                                                        pthread_cancel(marrthrHandle[1]);
-                                                        mClientSocket.closeConnection(SOCK_STREAM);
-                                                        mClientSocket.closeConnection( SOCK_DGRAM );
-                                                        return 0;
-                                                    } else {
-                                                        std::cout<<messageR<<std::endl;
-                                                        std::cout<<"Did not receive 200 OK after requesting Stage 1"<<std::endl;
-                                                        pthread_cancel(marrthrHandle[0]);
-                                                        pthread_cancel(marrthrHandle[1]);
-                                                        mClientSocket.closeConnection(SOCK_STREAM);
-                                                        mClientSocket.closeConnection( SOCK_DGRAM );
-                                                        return 1;
-                                                    }
-                                                } else {
-                                                    std::cout<<"Could not send Stage 1"<<std::endl;
+                                                }
+                                                if(alertM){
+                                                    std::cout<<messageR<<std::endl;
+                                                    std::cout<<"Success"<<std::endl;
                                                     pthread_cancel(marrthrHandle[0]);
                                                     pthread_cancel(marrthrHandle[1]);
                                                     mClientSocket.closeConnection(SOCK_STREAM);
                                                     mClientSocket.closeConnection( SOCK_DGRAM );
-                                                    return 1;
+                                                    return 0;
                                                 }
-                                            } else {
-                                                std::cout<<"Stage 0 did not meet requirements"<<std::endl;
-                                                pthread_cancel(marrthrHandle[0]);
-                                                pthread_cancel(marrthrHandle[1]);
-                                                mClientSocket.closeConnection(SOCK_STREAM);
-                                                mClientSocket.closeConnection( SOCK_DGRAM );
-                                                return 1;
                                             }
                                         } else {
                                             std::cout<<"Could not interchange measures"<<std::endl;

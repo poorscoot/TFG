@@ -63,7 +63,7 @@ int main () {
             Proposal_params.procedure.windowSizePacketLossCalcDownlink = 30;
             //The IP and port values are taken from the implementations
             Q4SMessage  message;
-            message.initRequest(Q4SMTYPE_BEGIN, "127.0.0.1", "27015", false, 0, false, 0, false, 0, false, NULL, true, &Proposal_params);
+            message.initRequest(Q4SMTYPE_BEGIN, "127.0.0.1", "56001", false, 0, false, 0, false, 0, false, NULL, true, &Proposal_params);
         //Send BEGIN package
             //Create TCP port
             //Create TCP connection to the same port as protocol
@@ -93,13 +93,31 @@ int main () {
                             return 0;
                         } else {
                             std::cout<<message<<std::endl;
-                            std::cout<<"Failure"<<std::endl;
+                            std::cout<<"Did not receive 200 OK message"<<std::endl;
                             pthread_cancel(marrthrHandle[1]);
                             mClientSocket.closeConnection(SOCK_STREAM);
                             return 1;
                         }
+                    } else { 
+                        std::cout<<"Could not send TCP message"<<std::endl;
+                        pthread_cancel(marrthrHandle[1]);
+                        mClientSocket.closeConnection(SOCK_STREAM);
+                        return 1;
                     }
+            } else {
+                std::cout<<"Could not establish TCP session"<<std::endl;
+                pthread_cancel(marrthrHandle[1]);
+                mClientSocket.closeConnection(SOCK_STREAM);
+                return 1;
             }
+        } else {
+            std::cout<<"Could not create TCP messages manager"<<std::endl;
+            pthread_cancel(marrthrHandle[1]);
+            mClientSocket.closeConnection(SOCK_STREAM);
+            return 1;
         }
+    } else {
+        std::cout<<"Test could not start"<<std::endl;
+        return 1;
     }
 }
