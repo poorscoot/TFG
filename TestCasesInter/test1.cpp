@@ -32,10 +32,8 @@ int main () {
     start &= mClientSocket.closeConnection(SOCK_STREAM);
     if (start){
         manager &= mReceivedMessagesTCP.init();
-        
         if(manager){
         //Create BEGIN package
-            //Call packageCreator, create Begin
             //The values given are taken from median videogame rate characteristic
             Q4SSDPParams    Proposal_params; 
             Proposal_params.session_id = 1;
@@ -61,28 +59,35 @@ int main () {
             Proposal_params.procedure.windowSizeLatencyCalcDownlink = 30;
             Proposal_params.procedure.windowSizePacketLossCalcUplink = 30;
             Proposal_params.procedure.windowSizePacketLossCalcDownlink = 30;
-            //The IP and port values are taken from the implementations
+            //The port depends on the implementation
             Q4SMessage  message;
             message.initRequest(Q4SMTYPE_BEGIN, "127.0.0.1", "56001", false, 0, false, 0, false, 0, false, NULL, true, &Proposal_params);
-        //Send BEGIN package
-            //Create TCP port
-            //Create TCP connection to the same port as protocol
-            //Send Begin
+            //Create a connection with the server
             
             connection &= mClientSocket.openConnection( SOCK_STREAM );
 
-            // launch received data managing threads.
+            //Create a thread to manage the TCP data
             thread_error = pthread_create( &marrthrHandle[1], NULL, manageTcpReceivedData ,NULL);
 
             if (connection){
+                //Send the begin message
                 tryTCP &= mClientSocket.sendTcpData(message.getMessageCChar());
-                //Receive ACK to BEGIN
-                    //Wait until socket recieves answer
+                    
                     if ( tryTCP ) 
                     {
+                        //Wait for an answer
+                        int i = 0;
                         while(mReceivedMessagesTCP.size()==0){
+                            i++;
                             sleep(1);
+                            if (i>=100){
+                                std::cout<<"Failure, server did not send a message or it didn't reach"<<std::endl;
+                                pthread_cancel(marrthrHandle[1]);
+                                mClientSocket.closeConnection(SOCK_STREAM);
+                                return 1;
+                            }
                         }
+                        //Check if the message received is a 200 OK or not
                         std::string message;
                         mReceivedMessagesTCP.readFirst( message );            
                         tryTCP = Q4SMessageTools_is200OKMessage(message,false, 0, 0);
@@ -93,31 +98,31 @@ int main () {
                             return 0;
                         } else {
                             std::cout<<message<<std::endl;
-                            std::cout<<"Did not receive 200 OK message"<<std::endl;
+                            std::cout<<"Failure, did not receive 200 OK message"<<std::endl;
                             pthread_cancel(marrthrHandle[1]);
                             mClientSocket.closeConnection(SOCK_STREAM);
                             return 1;
                         }
                     } else { 
-                        std::cout<<"Could not send TCP message"<<std::endl;
+                        std::cout<<"Failure, could not send TCP message"<<std::endl;
                         pthread_cancel(marrthrHandle[1]);
                         mClientSocket.closeConnection(SOCK_STREAM);
                         return 1;
                     }
             } else {
-                std::cout<<"Could not establish TCP session"<<std::endl;
+                std::cout<<"Failure, could not establish TCP session"<<std::endl;
                 pthread_cancel(marrthrHandle[1]);
                 mClientSocket.closeConnection(SOCK_STREAM);
                 return 1;
             }
         } else {
-            std::cout<<"Could not create TCP messages manager"<<std::endl;
+            std::cout<<"Failure, could not create TCP messages manager"<<std::endl;
             pthread_cancel(marrthrHandle[1]);
             mClientSocket.closeConnection(SOCK_STREAM);
             return 1;
         }
     } else {
-        std::cout<<"Test could not start"<<std::endl;
+        std::cout<<"Failure, test could not start"<<std::endl;
         return 1;
     }
 }

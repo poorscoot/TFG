@@ -279,13 +279,13 @@ bool compare (std::string message, Q4SSDPParams& params){
 }
 
 int main(){
-  //Close connections to prevent failure
+  //Close connections to prevent failure (Not implemented, crashes)
   if(start){
     manager &= mReceivedMessagesTCP.init( );
     //Create socket to receive BEGIN
-    //Create thread
     mServerSocket.startAlertSender();
-    if(manager){
+    if (manager) {
+      //Start listening for connection requests
       connection &= openConnectionListening(); 
       if(connection){
         //Waits until you receive a message
@@ -301,62 +301,76 @@ int main(){
             std::istringstream messageStream (message);
             std::getline(messageStream, extracted);
             initialPosition = extracted.find("BEGIN");
+            //Checks if the BEGIN received has the proposed parameters
             if (initialPosition != std::string::npos){
-              ok = true;
-            } else{
-              ok = false;
-            }
-        }
-        if(ok){
-            Q4SSDPParams    Proposal_params;
-            Proposal_params.session_id = 1;
-            Proposal_params.qosLevelUp = 0;
-            Proposal_params.qosLevelDown = 0;
-            Proposal_params.size_packet = 1000;
-            Proposal_params.q4SSDPAlertingMode = Q4SSDPALERTINGMODE_Q4SAWARENETWORK;
-            Proposal_params.alertPause = 2000;
-            Proposal_params.recoveryPause = 2000;
-            Proposal_params.latency = 100;
-            Proposal_params.jitterUp = 10;
-            Proposal_params.jitterDown = 10;
-            Proposal_params.bandWidthUp = 1000;
-            Proposal_params.bandWidthDown = 3000;
-            Proposal_params.packetLossUp = 2;
-            Proposal_params.packetLossDown = 2;
-            Proposal_params.procedure.negotiationTimeBetweenPingsUplink = 50;
-            Proposal_params.procedure.negotiationTimeBetweenPingsDownlink = 50;
-            Proposal_params.procedure.continuityTimeBetweenPingsUplink = 50;
-            Proposal_params.procedure.continuityTimeBetweenPingsDownlink = 50;
-            Proposal_params.procedure.bandwidthTime = 1000;
-            Proposal_params.procedure.windowSizeLatencyCalcUplink = 30;
-            Proposal_params.procedure.windowSizeLatencyCalcDownlink = 30;
-            Proposal_params.procedure.windowSizePacketLossCalcUplink = 30;
-            Proposal_params.procedure.windowSizePacketLossCalcDownlink = 30;
-            ok &= compare(message, Proposal_params);
-            if (ok){
-                std::cout<<"Success"<<std::endl;
-                pthread_cancel(marrthrHandle[0]);
-                pthread_cancel(marrthrDataHandle[0]);
-                pthread_cancel(marrthrListenHandle[0]);
-                mServerSocket.closeConnection( SOCK_STREAM );
-                return 0;
+                Q4SSDPParams    Proposal_params;
+                Proposal_params.session_id = 1;
+                Proposal_params.qosLevelUp = 0;
+                Proposal_params.qosLevelDown = 0;
+                Proposal_params.size_packet = 1000;
+                Proposal_params.q4SSDPAlertingMode = Q4SSDPALERTINGMODE_Q4SAWARENETWORK;
+                Proposal_params.alertPause = 2000;
+                Proposal_params.recoveryPause = 2000;
+                Proposal_params.latency = 100;
+                Proposal_params.jitterUp = 10;
+                Proposal_params.jitterDown = 10;
+                Proposal_params.bandWidthUp = 1000;
+                Proposal_params.bandWidthDown = 3000;
+                Proposal_params.packetLossUp = 2;
+                Proposal_params.packetLossDown = 2;
+                Proposal_params.procedure.negotiationTimeBetweenPingsUplink = 50;
+                Proposal_params.procedure.negotiationTimeBetweenPingsDownlink = 50;
+                Proposal_params.procedure.continuityTimeBetweenPingsUplink = 50;
+                Proposal_params.procedure.continuityTimeBetweenPingsDownlink = 50;
+                Proposal_params.procedure.bandwidthTime = 1000;
+                Proposal_params.procedure.windowSizeLatencyCalcUplink = 30;
+                Proposal_params.procedure.windowSizeLatencyCalcDownlink = 30;
+                Proposal_params.procedure.windowSizePacketLossCalcUplink = 30;
+                Proposal_params.procedure.windowSizePacketLossCalcDownlink = 30;
+                ok &= compare(message, Proposal_params);
+                if (ok){
+                    std::cout<<"Success"<<std::endl;
+                    pthread_cancel(marrthrHandle[0]);
+                    pthread_cancel(marrthrDataHandle[0]);
+                    pthread_cancel(marrthrListenHandle[0]);
+                    mServerSocket.closeConnection( SOCK_STREAM );
+                    return 0;
+                } else {
+                    std::cout<<message<<std::endl;
+                    std::cout<<"Failure, the message received did not contain the desired parameters"<<std::endl;
+                    pthread_cancel(marrthrHandle[0]);
+                    pthread_cancel(marrthrDataHandle[0]);
+                    pthread_cancel(marrthrListenHandle[0]);
+                    mServerSocket.closeConnection( SOCK_STREAM );
+                    return 1;
+                }
             } else {
-                std::cout<<"Failure"<<std::endl;
+                std::cout<<"Failure, could not start manager"<<std::endl;
                 pthread_cancel(marrthrHandle[0]);
                 pthread_cancel(marrthrDataHandle[0]);
                 pthread_cancel(marrthrListenHandle[0]);
                 mServerSocket.closeConnection( SOCK_STREAM );
                 return 1;
             }
-        } else {
-          std::cout<<"Failure"<<std::endl;
-          pthread_cancel(marrthrHandle[0]);
-          pthread_cancel(marrthrDataHandle[0]);
-          pthread_cancel(marrthrListenHandle[0]);
-          mServerSocket.closeConnection( SOCK_STREAM );
-          return 1;
         }
+      } else {
+        std::cout<<"Failure, could not open connection to listen"<<std::endl;
+        pthread_cancel(marrthrHandle[0]);
+        pthread_cancel(marrthrDataHandle[0]);
+        pthread_cancel(marrthrListenHandle[0]);
+        mServerSocket.closeConnection( SOCK_STREAM );
+        return 1;
       }   
-    }
+    } else {
+        std::cout<<"Failure, could not open connection to listen"<<std::endl;
+        pthread_cancel(marrthrHandle[0]);
+        pthread_cancel(marrthrDataHandle[0]);
+        pthread_cancel(marrthrListenHandle[0]);
+        mServerSocket.closeConnection( SOCK_STREAM );
+        return 1;
+    } 
+  } else {
+        std::cout<<"Test could not start"<<std::endl;
+        return 1;
   }  
 }

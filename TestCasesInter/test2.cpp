@@ -33,6 +33,7 @@ void* manageTcpReceivedData( void* useless ){
 
 //Prototype, divide in sub-functions & debug;
 //Compares de Q4S Params between a message and the given params
+//Based on a function from the hpcn-uam implementation
 bool compare (std::string message, Q4SSDPParams& params){
 
     bool ok = true;
@@ -243,9 +244,7 @@ int main () {
         
         if(manager){
         //Create BEGIN package
-            //Call packageCreator, create Begin
             //The values given are taken from median videogame rate characteristic
-            
             Q4SSDPParams    Proposal_params;
             Proposal_params.session_id = 1;
             Proposal_params.qosLevelUp = 0;
@@ -270,33 +269,39 @@ int main () {
             Proposal_params.procedure.windowSizeLatencyCalcDownlink = 30;
             Proposal_params.procedure.windowSizePacketLossCalcUplink = 30;
             Proposal_params.procedure.windowSizePacketLossCalcDownlink = 30;
-            //The IP and port values are taken from the implementations
+            //The port depends on the implementation
             Q4SMessage  message;
             message.initRequest(Q4SMTYPE_BEGIN, "127.0.0.1", "56001", false, 0, false, 0, false, 0, false, NULL, true, &Proposal_params);
-        //Send BEGIN package
-            //Create TCP port
-            //Create TCP connection to the same port as protocol
-            //Send Begin
+            //Create a TCP connection with the server
             
             connection &= mClientSocket.openConnection( SOCK_STREAM );
 
-            // launch received data managing threads.
+            //Create thread to manage TCP data
             thread_error = pthread_create( &marrthrHandle[1], NULL, manageTcpReceivedData ,NULL);
 
             if (connection){
+                //Send the BEGIN
                 tryTCP &= mClientSocket.sendTcpData(message.getMessageCChar());
-
-                //Receive ACK to BEGIN
-                    //Wait until socket recieves answer
                     if ( tryTCP ) 
                     {
+                        //Wait for an answer
+                        int i = 0;
                         while(mReceivedMessagesTCP.size()==0){
-                                sleep(1);
+                            i++;
+                            sleep(1);
+                            if (i>=100){
+                                std::cout<<"Failure, server did not send a message or it didn't reach"<<std::endl;
+                                pthread_cancel(marrthrHandle[1]);
+                                mClientSocket.closeConnection(SOCK_STREAM);
+                                return 1;
+                            }
                         }
+                        //Check if the message received is a 200 OK message or not
                         std::string message;
                         mReceivedMessagesTCP.readFirst( message );            
                         tryTCP = Q4SMessageTools_is200OKMessage(message,false, 0, 0);
                         if (tryTCP){
+                            //Check if the parameters are the ones proposed
                             ok &= compare(message, Proposal_params);
                             if (ok){
                                 std::cout<<"Success"<<std::endl;
@@ -311,6 +316,7 @@ int main () {
                                 return 1;
                             }
                         } else {
+                            std::cout<<message<<std::endl;
                             std::cout<<"Did not receive 200 OK message"<<std::endl;
                             pthread_cancel(marrthrHandle[1]);
                             mClientSocket.closeConnection(SOCK_STREAM);

@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 
+
 bool tryTCP = true;
 bool ok = true;
 bool connection = true;
@@ -63,23 +64,11 @@ void* manageUdpReceivedData( void* useless )
             // Comprobar que es un ping
             if ( Q4SMessageTools_isPingMessage(udpBuffer, &pingNumber, &receivedTimeStamp) )
             {
-
-                #if SHOW_INFO2                
-                    printf( "Received Ping, number:%d, timeStamp: %" PRIu64 "\n", pingNumber, receivedTimeStamp);
-                #endif
-
                 // mandar respuesta del ping
                 char reasonPhrase[ 256 ];
-                #if SHOW_INFO2
-                    printf( "Ping responsed %d\n", pingNumber);
-                #endif
                 Q4SMessage message200;
                 sprintf( reasonPhrase, "Q4S/1.0 200 OK\r\nSequence-Number:%d\r\nTimestamp:%" PRIu64 "\r\nContent-Length:0\r\n\r\n", pingNumber,receivedTimeStamp );
                 ok &= mClientSocket.sendUdpData( reasonPhrase );
-
-                #if SHOW_INFO2
-                    printf( "Received Udp: <%s>\n", udpBuffer );
-                #endif
             }
             mReceivedMessagesUDP.addMessage(message, actualTimeStamp);
 
@@ -97,9 +86,8 @@ int main () {
         manager &= mReceivedMessagesUDP.init();
         if(manager){
         //Create BEGIN package
-            //Call packageCreator, create Begin
             //The values given are taken from median videogame rate characteristic
-            
+            //Latency and jitter set to 0 to avoid Stage 0
             Q4SSDPParams    Proposal_params;
             Proposal_params.session_id = 1;
             Proposal_params.qosLevelUp = 0;
@@ -124,44 +112,85 @@ int main () {
             Proposal_params.procedure.windowSizeLatencyCalcDownlink = 30;
             Proposal_params.procedure.windowSizePacketLossCalcUplink = 30;
             Proposal_params.procedure.windowSizePacketLossCalcDownlink = 30;
-            //The IP and port values are taken from the implementations
+            //The port depends on the implementation
             Q4SMessage  message;
             message.initRequest(Q4SMTYPE_BEGIN, "127.0.0.1", "56001", false, 0, false, 0, false, 0, false, NULL, true, &Proposal_params);
-        //Send BEGIN package
-            //Create TCP port
-            //Create TCP connection to the same port as protocol
-            //Send Begin
-            
+            //Create a TCP and a UDP connection to the server
             connection & mClientSocket.openConnection( SOCK_STREAM );
             connection &= mClientSocket.openConnection( SOCK_DGRAM );
 
-            // launch received data managing threads.
+            //Create threads to manage TCP and UDP data
             thread_error = pthread_create( &marrthrHandle[0], NULL, manageUdpReceivedData, NULL);
             thread_error = pthread_create( &marrthrHandle[1], NULL, manageTcpReceivedData ,NULL);
 
             if (connection){
+                //Send the BEGIN
                 tryTCP &= mClientSocket.sendTcpData(message.getMessageCChar());
-
-                //Receive ACK to BEGIN
-                    //Wait until socket recieves answer
+                    
                     if ( tryTCP ) 
                     {
+                        //Wait for an answer
+                        int i = 0;
                         while(mReceivedMessagesTCP.size()==0){
-                                sleep(1);
+                            i++;
+                            sleep(1);
+                            if (i>=100){
+                                std::cout<<"Failure, server did not send a message or it didn't reach"<<std::endl;
+                                pthread_cancel(marrthrHandle[1]);
+                                mClientSocket.closeConnection(SOCK_STREAM);
+                                return 1;
+                            }
                         }
+                        //check if the answer received is a 200 OK or not
                         std::string messageR;
                         mReceivedMessagesTCP.readFirst( messageR );            
                         tryTCP = Q4SMessageTools_is200OKMessage(messageR,false, 0, 0);
                         if (tryTCP){
+                            //Create a READY 1 request
                             message.initRequest(Q4SMTYPE_READY, "127.0.0.1", "56001", false, 0, false, 0, true, 1);
+                            //Send the READY 1 request
                             tryStage1 &= mClientSocket.sendTcpData( message.getMessageCChar() );
                             if(tryStage1){
+                                //Wait for a 200 OK message
                                 Q4SMeasurementResult results;
                                 Q4SMeasurementResult downResults;
                                 mReceivedMessagesTCP.readFirst( messageR );
                                 stage1 &= Q4SMessageTools_is200OKMessage(messageR, false, 0, 0); 
                                 if (stage1){
-                                    
+                                    i=0;
+                                    while(mReceivedMessagesUDP.size()==0){
+                                        sleep(1);
+                                        i++;
+                                        if(i>=100){
+                                            std::cout<<"Failure, server did not send a BWIDTH message or it didn't reach"<<std::endl;
+                                            pthread_cancel(marrthrHandle[0]);
+                                            pthread_cancel(marrthrHandle[1]);
+                                            mClientSocket.closeConnection(SOCK_STREAM);
+                                            mClientSocket.closeConnection( SOCK_DGRAM );
+                                            return 1;
+                                        }
+                                    }
+                                    //checks if the message recieved is a BWIDTH message or not
+                                    mReceivedMessagesUDP.readFirst(messageR);
+                                    int garbage1;
+                                    int garbage2;
+                                    stage1 = Q4SMessageTools_isBandWidthMessage(messageR, &garbage1, &garbage2);
+                                    if (stage1){
+                                        std::cout<<"Success"<<std::endl;
+                                        pthread_cancel(marrthrHandle[0]);
+                                        pthread_cancel(marrthrHandle[1]);
+                                        mClientSocket.closeConnection(SOCK_STREAM);
+                                        mClientSocket.closeConnection( SOCK_DGRAM );
+                                        return 0; 
+                                    } else {
+                                        std::cout<<messageR<<std::endl;
+                                        std::cout<<"Failure, the server did not send a BWIDTH message"<<std::endl;
+                                        pthread_cancel(marrthrHandle[0]);
+                                        pthread_cancel(marrthrHandle[1]);
+                                        mClientSocket.closeConnection(SOCK_STREAM);
+                                        mClientSocket.closeConnection( SOCK_DGRAM );
+                                        return 1;  
+                                    }
                                 } else {
                                     std::cout<<messageR<<std::endl;
                                     std::cout<<"Failure, the server did not accept to pass to Stage 1"<<std::endl;
@@ -216,9 +245,3 @@ int main () {
         return 1;
     }
 }
-std::cout<<"Success"<<std::endl;
-                                    pthread_cancel(marrthrHandle[0]);
-                                    pthread_cancel(marrthrHandle[1]);
-                                    mClientSocket.closeConnection(SOCK_STREAM);
-                                    mClientSocket.closeConnection( SOCK_DGRAM );
-                                    return 0;

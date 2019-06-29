@@ -90,20 +90,14 @@ int main(){
         }
         std::string message;
         mReceivedMessagesTCP.readFirst( message );
-        //Checks if message received is BEGIN
-        if (ok){
-            std::string extracted;
-            std::string::size_type initialPosition;
-            std::istringstream messageStream (message);
-            std::getline(messageStream, extracted);
-            initialPosition = extracted.find("BEGIN");
-            if (initialPosition != std::string::npos){
-              ok = true;
-            } else{
-              ok = false;
-            }
-        }
-        if(ok){
+        //Check if the message received is a BEGIN or not
+        std::string extracted;
+        std::string::size_type initialPosition;
+        std::istringstream messageStream (message);
+        std::getline(messageStream, extracted);
+        initialPosition = extracted.find("BEGIN");
+        if (initialPosition != std::string::npos){
+            //Send a 200 OK with the desired parameters (Ignore the ones proposed)
             Q4SMessage message200;
             Q4SSDPParams params;
             params.qosLevelUp = 0;
@@ -130,58 +124,110 @@ int main(){
             params.procedure.windowSizePacketLossCalcUplink= 30;
             params.procedure.windowSizePacketLossCalcDownlink= 30;
             ok &= message200.init200OKBeginResponse(params);
-            ok &= mServerSocket.sendTcpData( 1, message200.getMessageCChar());  
-        }
-        while(mReceivedMessagesTCP.size()==0){
-            sleep(1);
-        }
-        mReceivedMessagesTCP.readFirst( message );
-        //Checks if message received is BEGIN
-        if (ok){
-            std::string extracted;
-            std::string::size_type initialPosition;
-            std::istringstream messageStream (message);
-            std::getline(messageStream, extracted);
-            initialPosition = extracted.find("READY");
-            if (initialPosition != std::string::npos){
-              ok = true;
-            } else{
-              ok = false;
-            }
-            while(mReceivedMessagesTCP.size()==0){
-                sleep(1);
-            }
-            mReceivedMessagesTCP.readFirst( message );
-            if (ok){
+            ok &= mServerSocket.sendTcpData( 1, message200.getMessageCChar());
+            if(ok){
+                int i=0;
+                while(mReceivedMessagesTCP.size()==0){
+                    i++;
+                    sleep(1);
+                    if ( i>=100){
+                        std::cout<<"Failure, either message was not sent or didn't reach"<<std::endl;
+                        pthread_cancel(marrthrHandle[0]);
+                        pthread_cancel(marrthrDataHandle[0]);
+                        pthread_cancel(marrthrListenHandle[0]);
+                        mServerSocket.closeConnection( SOCK_STREAM );
+                        return 1;
+                    };
+                }
+                mReceivedMessagesTCP.readFirst( message );
+                //Check if the type of the message received is READY
                 std::string extracted;
                 std::string::size_type initialPosition;
                 std::istringstream messageStream (message);
                 std::getline(messageStream, extracted);
                 initialPosition = extracted.find("READY");
                 if (initialPosition != std::string::npos){
-                ok = true;
-                } else{
-                ok = false;
+                    //Wait for a new message
+                    i=0;
+                    while(mReceivedMessagesTCP.size()==0){
+                        i++;
+                        sleep(1);
+                        if ( i>=100){
+                            std::cout<<"Failure, either READY message was not resent or didn't reach"<<std::endl;
+                            pthread_cancel(marrthrHandle[0]);
+                            pthread_cancel(marrthrDataHandle[0]);
+                            pthread_cancel(marrthrListenHandle[0]);
+                            mServerSocket.closeConnection( SOCK_STREAM );
+                            return 1;
+                        };
+                    }
+                    mReceivedMessagesTCP.readFirst( message );
+                    //Check if the type of the new message is READY
+                    std::string extracted;
+                    std::string::size_type initialPosition;
+                    std::istringstream messageStream (message);
+                    std::getline(messageStream, extracted);
+                    initialPosition = extracted.find("READY");
+                    if (initialPosition != std::string::npos){
+                        std::cout<<"Success"<<std::endl;
+                        pthread_cancel(marrthrHandle[0]);
+                        pthread_cancel(marrthrDataHandle[0]);
+                        pthread_cancel(marrthrListenHandle[0]);
+                        mServerSocket.closeConnection( SOCK_STREAM );
+                        return 0;
+                    } else {
+                        std::cout<<message<<std::endl;
+                        std::cout<<"Failure, the READY message was not sent again"<<std::endl;
+                        pthread_cancel(marrthrHandle[0]);
+                        pthread_cancel(marrthrDataHandle[0]);
+                        pthread_cancel(marrthrListenHandle[0]);
+                        mServerSocket.closeConnection( SOCK_STREAM );
+                        return 1;
+                    }
+                } else {
+                    std::cout<<message<<std::endl;
+                    std::cout<<"Failure, the type of the received message received was not READY"<<std::endl;
+                    pthread_cancel(marrthrHandle[0]);
+                    pthread_cancel(marrthrDataHandle[0]);
+                    pthread_cancel(marrthrListenHandle[0]);
+                    mServerSocket.closeConnection( SOCK_STREAM );
+                    return 1;
                 }
-            } else {return ok;}
-        }
-        if(ok){
-                std::cout<<"Success"<<std::endl;
-                pthread_cancel(marrthrHandle[0]);
-                pthread_cancel(marrthrDataHandle[0]);
-                pthread_cancel(marrthrListenHandle[0]);
-                mServerSocket.closeConnection( SOCK_STREAM );
-                return 0;
             } else {
-                std::cout<<message<<std::endl;
-                std::cout<<"Failure"<<std::endl;
+                std::cout<<"Failure, the 200 OK message could not be sent"<<std::endl;
                 pthread_cancel(marrthrHandle[0]);
                 pthread_cancel(marrthrDataHandle[0]);
                 pthread_cancel(marrthrListenHandle[0]);
                 mServerSocket.closeConnection( SOCK_STREAM );
                 return 1;
             }
-      }   
-    }
-  }  
+        } else {
+            std::cout<<message<<std::endl;
+            std::cout<<"Failure, the type of the received message was not BEGIN"<<std::endl;
+            pthread_cancel(marrthrHandle[0]);
+            pthread_cancel(marrthrDataHandle[0]);
+            pthread_cancel(marrthrListenHandle[0]);
+            mServerSocket.closeConnection( SOCK_STREAM );
+            return 1;
+        }
+      } else {
+        std::cout<<"Failure, could not open connection and start listening"<<std::endl;
+        pthread_cancel(marrthrHandle[0]);
+        pthread_cancel(marrthrDataHandle[0]);
+        pthread_cancel(marrthrListenHandle[0]);
+        mServerSocket.closeConnection( SOCK_STREAM );
+        return 1;
+      }  
+    } else {
+      std::cout<<"Failure, could not start manager"<<std::endl;
+      pthread_cancel(marrthrHandle[0]);
+      pthread_cancel(marrthrDataHandle[0]);
+      pthread_cancel(marrthrListenHandle[0]);
+      mServerSocket.closeConnection( SOCK_STREAM );
+      return 1;
+    } 
+  } else {
+    std::cout<<"Test could not start"<<std::endl;
+    return 1;
+  }   
 }

@@ -91,101 +91,144 @@ int main(){
         std::string message;
         mReceivedMessagesTCP.readFirst( message );
         //Checks if message received is BEGIN
-        if (ok){
-            std::string extracted;
-            std::string::size_type initialPosition;
-            std::istringstream messageStream (message);
-            std::getline(messageStream, extracted);
-            initialPosition = extracted.find("BEGIN");
-            if (initialPosition != std::string::npos){
-              ok = true;
-            } else{
-              ok = false;
+        std::string extracted;
+        std::string::size_type initialPosition;
+        std::istringstream messageStream (message);
+        std::getline(messageStream, extracted);
+        initialPosition = extracted.find("BEGIN");
+        if (initialPosition != std::string::npos){
+          Q4SMessage message200;
+          Q4SSDPParams params;
+          params.qosLevelUp = 0;
+          params.qosLevelDown = 0;
+          params.size_packet = 1000;
+          params.q4SSDPAlertingMode = Q4SSDPALERTINGMODE_Q4SAWARENETWORK;
+          params.session_id=1; 
+          params.alertPause = 1000;
+          params.recoveryPause = 1000;
+          params.latency = 0;
+          params.jitterUp = 0;
+          params.jitterDown = 0;
+          params.bandWidthUp = 1000;
+          params.bandWidthDown = 3000;
+          params.packetLossUp = 2;
+          params.packetLossDown = 2;
+          params.procedure.negotiationTimeBetweenPingsUplink = 50;
+          params.procedure.negotiationTimeBetweenPingsDownlink = 50;
+          params.procedure.continuityTimeBetweenPingsUplink = 50;
+          params.procedure.continuityTimeBetweenPingsDownlink = 50;
+          params.procedure.bandwidthTime = 1000;
+          params.procedure.windowSizeLatencyCalcUplink= 50;
+          params.procedure.windowSizeLatencyCalcDownlink= 50;
+          params.procedure.windowSizePacketLossCalcUplink= 30;
+          params.procedure.windowSizePacketLossCalcDownlink= 30;
+          ok &= message200.init200OKBeginResponse(params);
+          ok &= mServerSocket.sendTcpData( 1, message200.getMessageCChar());
+          //Checks if the type of the received message is READY
+          if (ok){
+            int i = 0;
+            while(mReceivedMessagesTCP.size()==0){
+              i++;
+              sleep(1);
+              if ( i>=100){
+                  std::cout<<"Failure, either message was not sent or didn't reach"<<std::endl;
+                  pthread_cancel(marrthrHandle[0]);
+                  pthread_cancel(marrthrDataHandle[0]);
+                  pthread_cancel(marrthrListenHandle[0]);
+                  mServerSocket.closeConnection( SOCK_STREAM );
+                  return 1;
+              };
             }
-        }
-        if(ok){
-            Q4SMessage message200;
-            Q4SSDPParams params;
-            params.qosLevelUp = 0;
-            params.qosLevelDown = 0;
-            params.size_packet = 1000;
-            params.q4SSDPAlertingMode = Q4SSDPALERTINGMODE_Q4SAWARENETWORK;
-            params.session_id=1; 
-            params.alertPause = 1000;
-            params.recoveryPause = 1000;
-            params.latency = 0;
-            params.jitterUp = 0;
-            params.jitterDown = 0;
-            params.bandWidthUp = 1000;
-            params.bandWidthDown = 3000;
-            params.packetLossUp = 2;
-            params.packetLossDown = 2;
-            params.procedure.negotiationTimeBetweenPingsUplink = 50;
-            params.procedure.negotiationTimeBetweenPingsDownlink = 50;
-            params.procedure.continuityTimeBetweenPingsUplink = 50;
-            params.procedure.continuityTimeBetweenPingsDownlink = 50;
-            params.procedure.bandwidthTime = 1000;
-            params.procedure.windowSizeLatencyCalcUplink= 50;
-            params.procedure.windowSizeLatencyCalcDownlink= 50;
-            params.procedure.windowSizePacketLossCalcUplink= 30;
-            params.procedure.windowSizePacketLossCalcDownlink= 30;
-            ok &= message200.init200OKBeginResponse(params);
-            ok &= mServerSocket.sendTcpData( 1, message200.getMessageCChar());  
-        }
-        while(mReceivedMessagesTCP.size()==0){
-            sleep(1);
-        }
-        mReceivedMessagesTCP.readFirst( message );
-        //Checks if message received is BEGIN
-        if (ok){
+            //Checks if the message received is a READY message
+            mReceivedMessagesTCP.readFirst( message );
             std::string extracted;
             std::string::size_type initialPosition;
             std::istringstream messageStream (message);
             std::getline(messageStream, extracted);
             initialPosition = extracted.find("READY");
             if (initialPosition != std::string::npos){
-              ok = true;
-            } else{
-              ok = false;
-            }
-            if (ok){while (!extracted.empty()){
+              //Checks if the message received has a stage header and if the stage is the one looked for
+              while (!extracted.empty()){
                 extracted= {};
                 std::getline(messageStream,extracted);
-                  std::string patternStage="Stage:";
-                  unsigned long stage;
-                  std::string::size_type finalPosition;
-                  initialPosition = extracted.find("Stage:");
-                  if (initialPosition != std::string::npos){
-                      initialPosition = extracted.find("Stage:") + patternStage.length();
-                      finalPosition = extracted.find("\n",initialPosition+1);
-                      stage=std::stol(extracted.substr(initialPosition, finalPosition-initialPosition));
-                      if (stage==1){
-                        ok = true;
-                      } else{
-                        ok = false;
-                    }
+                std::string patternStage="Stage:";
+                unsigned long stage;
+                std::string::size_type finalPosition;
+                initialPosition = extracted.find("Stage:");
+                if (initialPosition != std::string::npos){
+                  initialPosition = extracted.find("Stage:") + patternStage.length();
+                  finalPosition = extracted.find("\n",initialPosition+1);
+                  stage=std::stol(extracted.substr(initialPosition, finalPosition-initialPosition));
+                  if (stage==1){
+                    ok=true;
+                    break;
+                  } else {
+                    ok=false;
                   }
+                } else {
+                  ok=false;
+                }
               }
-            }
-        }
-        if(ok){
-                std::cout<<message<<std::endl;
+              if (ok){
                 std::cout<<"Success"<<std::endl;
                 pthread_cancel(marrthrHandle[0]);
                 pthread_cancel(marrthrDataHandle[0]);
                 pthread_cancel(marrthrListenHandle[0]);
                 mServerSocket.closeConnection( SOCK_STREAM );
                 return 0;
-            } else {
+              } else {
                 std::cout<<message<<std::endl;
-                std::cout<<"Failure"<<std::endl;
+                std::cout<<"Failure, the message did not include a stage header or the stage included wasn't the desired one"<<std::endl;
                 pthread_cancel(marrthrHandle[0]);
                 pthread_cancel(marrthrDataHandle[0]);
                 pthread_cancel(marrthrListenHandle[0]);
                 mServerSocket.closeConnection( SOCK_STREAM );
                 return 1;
+              }
+            } else {
+              std::cout<<message<<std::endl;
+              std::cout<<"Failure, the message received was not a READY message"<<std::endl;
+              pthread_cancel(marrthrHandle[0]);
+              pthread_cancel(marrthrDataHandle[0]);
+              pthread_cancel(marrthrListenHandle[0]);
+              mServerSocket.closeConnection( SOCK_STREAM );
+              return 1;
             }
-      }   
-    }
-  }  
+          } else {
+              std::cout<<"Failure, the 200 OK message could not be sent"<<std::endl;
+              pthread_cancel(marrthrHandle[0]);
+              pthread_cancel(marrthrDataHandle[0]);
+              pthread_cancel(marrthrListenHandle[0]);
+              mServerSocket.closeConnection( SOCK_STREAM );
+              return 1;
+          }
+        } else {
+            std::cout<<message<<std::endl;
+            std::cout<<"Failure, the type of the received message was not BEGIN"<<std::endl;
+            pthread_cancel(marrthrHandle[0]);
+            pthread_cancel(marrthrDataHandle[0]);
+            pthread_cancel(marrthrListenHandle[0]);
+            mServerSocket.closeConnection( SOCK_STREAM );
+            return 1;
+        }
+      } else {
+        std::cout<<"Failure, could not open connection and start listening"<<std::endl;
+        pthread_cancel(marrthrHandle[0]);
+        pthread_cancel(marrthrDataHandle[0]);
+        pthread_cancel(marrthrListenHandle[0]);
+        mServerSocket.closeConnection( SOCK_STREAM );
+        return 1;
+      }       
+    } else {
+      std::cout<<"Failure, could not start manager"<<std::endl;
+      pthread_cancel(marrthrHandle[0]);
+      pthread_cancel(marrthrDataHandle[0]);
+      pthread_cancel(marrthrListenHandle[0]);
+      mServerSocket.closeConnection( SOCK_STREAM );
+      return 1;
+    } 
+  } else {
+    std::cout<<"Test could not start"<<std::endl;
+    return 1;
+  }   
 }

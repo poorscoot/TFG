@@ -75,22 +75,24 @@ bool openConnectionListening()
 }
 
 int main(){
-  //Close connections to prevent failure
+  //Close connections to prevent failure (Not implemented, crashes)
   if(start){
+    //Create manager
     manager &= mReceivedMessagesTCP.init( );
     //Create socket to receive BEGIN
-    //Create thread
     mServerSocket.startAlertSender();
     if(manager){
+      //Start listening for connection requests
       connection &= openConnectionListening(); 
       if(connection){
-        //Waits until you receive a message
+        //Wait until a message is received
         while(mReceivedMessagesTCP.size()==0){
-            sleep(1);
+          sleep(1);
         }
         std::string message;
+        //Reads the message
         mReceivedMessagesTCP.readFirst( message );
-        //Checks if message received is BEGIN
+        //Check if the message received is a BEGIN
         if (ok){
             std::string extracted;
             std::string::size_type initialPosition;
@@ -98,28 +100,38 @@ int main(){
             std::getline(messageStream, extracted);
             initialPosition = extracted.find("BEGIN");
             if (initialPosition != std::string::npos){
-              ok = true;
+              std::cout<<"Success"<<std::endl;
+              pthread_cancel(marrthrHandle[0]);
+              pthread_cancel(marrthrDataHandle[0]);
+              pthread_cancel(marrthrListenHandle[0]);
+              mServerSocket.closeConnection( SOCK_STREAM );
+              return 0;
             } else{
-              ok = false;
+              std::cout<<message<<std::endl;
+              std::cout<<"Failure, the message received was not a BEGIN"<<std::endl;
+              pthread_cancel(marrthrHandle[0]);
+              pthread_cancel(marrthrDataHandle[0]);
+              pthread_cancel(marrthrListenHandle[0]);
+              mServerSocket.closeConnection( SOCK_STREAM );
+              return 1;
             }
         }
-        if(ok){
-          std::cout<<"Success"<<std::endl;
+      }  else {
+          std::cout<<"Could not start listening"<<std::endl;
           pthread_cancel(marrthrHandle[0]);
           pthread_cancel(marrthrDataHandle[0]);
           pthread_cancel(marrthrListenHandle[0]);
           mServerSocket.closeConnection( SOCK_STREAM );
-          return 0;
-        } else {
-          std::cout<<message<<std::endl;
-          std::cout<<"Failure"<<std::endl;
-          pthread_cancel(marrthrHandle[0]);
-          pthread_cancel(marrthrDataHandle[0]);
-          pthread_cancel(marrthrListenHandle[0]);
-          mServerSocket.closeConnection( SOCK_STREAM );
-          return 1;
-        }
-      }   
+      }
+    } else {
+        std::cout<<"Could not create TCP messages manager"<<std::endl;
+        pthread_cancel(marrthrHandle[0]);
+        pthread_cancel(marrthrDataHandle[0]);
+        pthread_cancel(marrthrListenHandle[0]);
+        mServerSocket.closeConnection( SOCK_STREAM );
     }
+  } else {
+        std::cout<<"Test could not start"<<std::endl;
+        return 1;
   }  
 }

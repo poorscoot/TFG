@@ -91,8 +91,8 @@ void* manageUdpReceivedData( void* useless )
     }
 }
 
-//Function that manages Stage 0
-//Taken from the hpcn-uam implementation
+
+
 bool sendRegularPings(std::vector<uint64_t> &arrSentPingTimestamps, unsigned long pingsToSend, unsigned long timeBetweenPings)
 {
     bool ok = true;
@@ -105,9 +105,12 @@ bool sendRegularPings(std::vector<uint64_t> &arrSentPingTimestamps, unsigned lon
     struct timeval time_s;
     for ( pingNumber = 0; pingNumber < pingNumberToSend; pingNumber++ )
     {
+        //std::cout<<"ping"<<pingNumber<<std::endl;
         // Store the timestamp
         time_error = gettimeofday(&time_s, NULL); 
         timeStamp =  time_s.tv_sec*1000 + time_s.tv_usec/1000;
+        //timeStamp = (unsigned long) 20; 
+        //timeStamp = ETime_getTime( );
         
         arrSentPingTimestamps.push_back( timeStamp );
 
@@ -115,7 +118,9 @@ bool sendRegularPings(std::vector<uint64_t> &arrSentPingTimestamps, unsigned lon
         message.initPing("127.0.0.1", "56000", pingNumber, timeStamp);
         ok &= mClientSocket.sendUdpData( message.getMessageCChar() );
 
-        // Wait for the established time between pings
+        // Wait the established time between pings
+
+        
         usleep(timeBetweenPings*1000 );
     }
    
@@ -123,7 +128,6 @@ bool sendRegularPings(std::vector<uint64_t> &arrSentPingTimestamps, unsigned lon
     return ok;
 }
 
-//Taken from the hpcn-uam implementation
 void calculateLatency(Q4SMessageManager &mReceivedMessages, std::vector<uint64_t> &arrSentPingTimestamps, float &latency, unsigned long pingsSent, bool showMeasureInfo)
 {
     Q4SMessageInfo messageInfo;
@@ -139,16 +143,31 @@ void calculateLatency(Q4SMessageManager &mReceivedMessages, std::vector<uint64_t
         if( mReceivedMessages.read200OKMessage( messageInfo, true, &TimeStampPing, &sequenceNumberPing ) == true )
         {
             // Actual ping latency calculation
+            //printf("TIEMPO 200 0k: %"PRIu64"\nTIEMPO PING: %"PRIu64"\n",messageInfo.timeStamp, TimeStampPing);
+
+            
             actualPingLatency = (messageInfo.timeStamp - TimeStampPing)/ 2.0f;
+            //printf("TIEMPO 200 0k: %lu\nTIEMPO PING: %lu\n",messageInfo.timeStamp, arrSentPingTimestamps[ pingIndex ]);
             // Latency store
             arrPingLatencies.push_back( actualPingLatency );
+
+            #if SHOW_INFO2
+            
+                printf( "PING %d actual ping latency: %.3f\n", pingIndex, actualPingLatency );
+            #endif
+        }
+        else
+        {
+            #if SHOW_INFO2
+                printf( "PING RESPONSE %d message lost\n", pingIndex);
+            #endif
         }
     }
+
     // Latency calculation
     latency = EMathUtils_median( arrPingLatencies );
 }
 
-//Taken from the hpcn-uam implementation
 void calculateJitter(Q4SMessageManager &mReceivedMessages, float &jitter, unsigned long timeBetweenPings, unsigned long pingsSent, bool calculatePacketLoss, float &packetLoss, bool showMeasureInfo) 
 {
     int pingIndex = 0;
@@ -172,6 +191,9 @@ void calculateJitter(Q4SMessageManager &mReceivedMessages, float &jitter, unsign
                 unsigned long delAbs = arrReceivedPingTimestamps[ indexReceived ] - arrReceivedPingTimestamps[ indexReceived - 1 ];
                 actualPingTimeWithPrevious = /*std::abs( delAbs ) */delAbs;
                 arrPingJitters.push_back( (unsigned long)abs((double)actualPingTimeWithPrevious - (double)timeBetweenPings) );
+                #if SHOW_INFO2
+                    printf( "PING %d ET: %" PRIu64 "\n", pingIndex, actualPingTimeWithPrevious );
+                #endif
             }
             firstPing= false; 
             indexReceived++; 
@@ -189,6 +211,9 @@ void calculateJitter(Q4SMessageManager &mReceivedMessages, float &jitter, unsign
                 indexReceived++; 
 
             }
+            #if SHOW_INFO2
+                printf( "PING %d message lost\n", pingIndex);
+            #endif
         }
     }
     jitter = EMathUtils_mean( arrPingJitters );
@@ -197,9 +222,12 @@ void calculateJitter(Q4SMessageManager &mReceivedMessages, float &jitter, unsign
     {
         packetLoss = ((float)(pingMaxCount-indexReceived+packetLossCount)/ (float)(pingsSent)) * 100.f;
     }
+
+    #if SHOW_INFO2
+        printf( "Time With previous ping mean: %.3f\n", jitter );
+    #endif
 }
 
-//Taken from the hpcn-uam implementation
 void calculateJitterStage0(Q4SMessageManager &mReceivedMessages, float &jitter, unsigned long timeBetweenPings, unsigned long pingsSent, bool showMeasureInfo)
 {
     float packetLoss = 0.f;
@@ -211,6 +239,7 @@ bool interchangeMeasurementProcedure(Q4SMeasurementValues &downMeasurements, Q4S
     bool ok = true;
     while(mReceivedMessagesUDP.size()>0)
     {
+        //printf("BORRANDO MENSAJES\n");
         mReceivedMessagesUDP.eraseMessages();
     }
     if ( ok ) 
@@ -245,7 +274,7 @@ bool interchangeMeasurementProcedure(Q4SMeasurementValues &downMeasurements, Q4S
     return ok;
 }
 
-//Taken from the hpcn-uam implementation
+
 bool checkStage0(float maxLatency, float maxJitter, Q4SMeasurementResult &results)
 {
     bool ok = true;
@@ -253,19 +282,24 @@ bool checkStage0(float maxLatency, float maxJitter, Q4SMeasurementResult &result
     if ( results.values.latency > maxLatency )
     {
         results.latencyAlert = true;
+        #if SHOW_INFO
+            printf( "Lantecy limits not reached: %.3f\n", maxLatency);
+        #endif
         ok = false;
     }
 
     if ( results.values.jitter > maxJitter)
     {
         results.jitterAlert = true;
+        #if SHOW_INFO
+            printf( "Jitter limits not reached: %.3f\n", maxJitter);
+        #endif
         ok = false;
     }
 
     return ok;
 }
 
-//Taken from the hpcn-uam implementation
 bool checkStage0(float maxLatencyUp, float maxJitterUp, float maxLatencyDown, float maxJitterDown, Q4SMeasurementResult &upResults, Q4SMeasurementResult &downResults)
 {
     bool ok = true;
@@ -287,6 +321,7 @@ int main () {
         manager &= mReceivedMessagesUDP.init();
         if(manager){
         //Create BEGIN package
+            //Call packageCreator, create Begin
             //The values given are taken from median videogame rate characteristic
             Q4SSDPParams    Proposal_params; 
             Proposal_params.session_id = 1;
@@ -312,76 +347,53 @@ int main () {
             Proposal_params.procedure.windowSizeLatencyCalcDownlink = 30;
             Proposal_params.procedure.windowSizePacketLossCalcUplink = 30;
             Proposal_params.procedure.windowSizePacketLossCalcDownlink = 30;
-            //The port depends on the implementation
+            //The IP and port values are taken from the implementations
             Q4SMessage  message;
             message.initRequest(Q4SMTYPE_BEGIN, "127.0.0.1", "56001", false, 0, false, 0, false, 0, false, NULL, true, &Proposal_params);
-            //Create a TCP and a UDP connection to the server
+        //Send BEGIN package
+            //Create TCP port
+            //Create TCP connection to the same port as protocol
+            //Send Begin
             
             connection &= mClientSocket.openConnection( SOCK_STREAM );
             connection &= mClientSocket.openConnection( SOCK_DGRAM );
 
-            //Create threads to manage TDP and UDP data
+            // launch received data managing threads.
             thread_error = pthread_create( &marrthrHandle[0], NULL, manageUdpReceivedData, NULL);
             thread_error = pthread_create( &marrthrHandle[1], NULL, manageTcpReceivedData, NULL);
 
             if (connection){
-                //Send a BEGIN message
                 tryTCP &= mClientSocket.sendTcpData(message.getMessageCChar());
-                    
+                //Receive ACK to BEGIN
+                    //Wait until socket recieves answer
                     if ( tryTCP ) 
                     {
-                        //Wait for an answer
-                        int i = 0;
                         while(mReceivedMessagesTCP.size()==0){
-                            i++;
                             sleep(1);
-                            if (i>=100){
-                                std::cout<<"Failure, server did not send a message or it didn't reach"<<std::endl;
-                                pthread_cancel(marrthrHandle[1]);
-                                mClientSocket.closeConnection(SOCK_STREAM);
-                                return 1;
-                            }
                         }
-                        //Check if the message received is a 200 OK message or not
                         std::string messageR;
                         mReceivedMessagesTCP.readFirst( messageR );            
                         tryTCP = Q4SMessageTools_is200OKMessage(messageR,false, 0, 0);
                         if (tryTCP){
-                            //Create a READY 0 message
                             message.initRequest(Q4SMTYPE_READY, "127.0.0.1", "56001", false, 0, false, 0, true, 0);
                             while(mReceivedMessagesUDP.size()>0)
                             {
                                 mReceivedMessagesUDP.eraseMessages();
                             }
-                            //Send the READY
                             tryStage0 &= mClientSocket.sendTcpData( message.getMessageCChar() );
                             if(tryStage0){
                                 Q4SMeasurementResult results;
                                 Q4SMeasurementResult downResults;
-                                i = 0;
-                                //Wait for an answer
-                                while(mReceivedMessagesTCP.size()==0){
-                                    i++;
-                                    sleep(1);
-                                    if (i>=100){
-                                        std::cout<<"Failure, server did not send a message or it didn't reach"<<std::endl;
-                                        pthread_cancel(marrthrHandle[1]);
-                                        mClientSocket.closeConnection(SOCK_STREAM);
-                                        return 1;
-                                    }
-                                }
-                                //Check if the answer is a 200 OK
                                 mReceivedMessagesTCP.readFirst( messageR );
                                 stage0 &= Q4SMessageTools_is200OKMessage(messageR, false, 0, 0); 
                                 if (stage0){
-                                    //Measure Stage 0
                                     Q4SSDP_parse(messageR, params);
                                     std::vector<uint64_t> arrSentPingTimestamps;
                                     Q4SMeasurementValues downMeasurements;
                                     char data2save[200]={};
                                     unsigned long pingsToSend = params.procedure.windowSizeLatencyCalcDownlink;
                                     pings &= sendRegularPings(arrSentPingTimestamps, pingsToSend, params.procedure.negotiationTimeBetweenPingsUplink);
-                                    //usleep(50*1000*pingsToSend);
+                                    usleep(50*1000*pingsToSend);
                                     if (pings){
                                         usleep(params.procedure.negotiationTimeBetweenPingsUplink *1000);
                                         // Calculate Latency
@@ -389,45 +401,27 @@ int main () {
                                         float packetLoss = 0.f;
                                         calculateJitterStage0(mReceivedMessagesUDP, results.values.jitter,params.procedure.negotiationTimeBetweenPingsUplink, pingsToSend, false);
                                         results.values.packetLoss= 0; 
-                                        results.values.bandwidth= 0;
-                                        //Interchange the measutrements (In the final test this should be done directly with the PINGs)
+                                        results.values.bandwidth= 0; 
                                         interchange &= interchangeMeasurementProcedure(downMeasurements, results);
                                         if (interchange){
-                                            //Check if the measurements are the ones desired
                                             downResults.values = downMeasurements;
                                             stage0ok &= checkStage0(params.latency, params.jitterUp, params.latency, params.jitterDown, results, downResults);
                                             if(stage0ok){
-                                                //Create a READY 1 message
                                                 message.initRequest(Q4SMTYPE_READY, "127.0.0.1", "56001", false, 0, false, 0, true, 1);
                                                 while(mReceivedMessagesUDP.size()>0)
                                                 {
                                                     mReceivedMessagesUDP.eraseMessages();
                                                 }
-                                                //Send the READY 1
                                                 tryStage1 &= mClientSocket.sendTcpData( message.getMessageCChar() );
                                                 if(tryStage1){
-                                                    //Wait fon an answer
-                                                    i = 0;
                                                     while(mReceivedMessagesTCP.size()==0){
-                                                        i++;
                                                         sleep(1);
-                                                        if (i>=100){
-                                                            std::cout<<"Failure, server did not send a message or it didn't reach"<<std::endl;
-                                                            pthread_cancel(marrthrHandle[1]);
-                                                            mClientSocket.closeConnection(SOCK_STREAM);
-                                                            return 1;
-                                                        }
                                                     }
-                                                    //Check the answer to see if it's a 200 OK or not
                                                     mReceivedMessagesTCP.readFirst( messageR );
                                                     stage1 &= Q4SMessageTools_is200OKMessage(messageR, false, 0, 0); 
                                                     if (stage1){
-                                                        std::cout<<"Success"<<std::endl;
-                                                        pthread_cancel(marrthrHandle[0]);
-                                                        pthread_cancel(marrthrHandle[1]);
-                                                        mClientSocket.closeConnection(SOCK_STREAM);
-                                                        mClientSocket.closeConnection( SOCK_DGRAM );
-                                                        return 0;
+                                                        
+
                                                     } else {
                                                         std::cout<<messageR<<std::endl;
                                                         std::cout<<"Did not receive 200 OK after requesting Stage 1"<<std::endl;
@@ -523,3 +517,12 @@ int main () {
         return 1;
     }
 }
+
+/* 
+std::cout<<"Success"<<std::endl;
+                                                        pthread_cancel(marrthrHandle[0]);
+                                                        pthread_cancel(marrthrHandle[1]);
+                                                        mClientSocket.closeConnection(SOCK_STREAM);
+                                                        mClientSocket.closeConnection( SOCK_DGRAM );
+                                                        return 0;
+                                                        */
