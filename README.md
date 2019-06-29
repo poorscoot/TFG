@@ -43,10 +43,20 @@ General instructions
 
 Tests (Only the tests with a python script are functional)
 
-    1.Tests wether or not the server answers a BEGIN message.
+    1. Tests wether or not the server answers a BEGIN message.
 
     2. Tests wether or not it answers with the QoS 
     characteristics proposed. (Optional).
+
+    3. Checks if the server answers a READY 0 and advances to
+    the next stage if the measurements are correct.
+
+    4. Checks wether or not the server sends an ALERT if the 
+    measurements in Stage 0 do not meet requirements.
+
+    5. Checks wether or not the server accepts a READY 1 if
+    Stage 0 isn't necessary (Latency & Jitter = 0) and starts
+    Stage 1.
 
     16. Tests wether or not the client sends a BEGIN message.
 
@@ -66,7 +76,7 @@ Tests (Only the tests with a python script are functional)
 
     23. Checks if the client starts Stage 1 without first
     going through Stage 0 if it isn't necessary (Latency
-    and jitter values at 0).
+    & Jitter = 0).
 
 Besides checking if the implementations cover these properties,
 it also test if it understands the message 
